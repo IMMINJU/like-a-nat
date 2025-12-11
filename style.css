@@ -145,3 +145,56 @@ body {
 #title-screen.hidden {
   display: none;
 }
+
+/* 선택지 박스 */
+#choice-box {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 2px solid #fff;
+  padding: 12px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 20;
+}
+
+#choice-box.visible {
+  display: flex;
+}
+
+.choice-item {
+  color: #888;
+  font-size: 14px;
+  padding: 10px 16px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  letter-spacing: 1px;
+}
+
+.choice-item:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #555;
+}
+
+.choice-item.selected {
+  color: #fff;
+  border-color: #fff;
+}
+
+.choice-item::before {
+  content: '';
+  margin-right: 8px;
+}
+
+.choice-item.selected::before {
+  content: '>';
+}
+
+.choice-item.hidden {
+  display: none;
+}

@@ -10,6 +10,8 @@ const dialogueTextEl = document.getElementById('dialogue-text');
 const clickPrompt = document.getElementById('click-prompt');
 const container = document.getElementById('game-container');
 const titleScreen = document.getElementById('title-screen');
+const choiceBox = document.getElementById('choice-box');
+const choiceItems = document.querySelectorAll('.choice-item');
 
 // 캔버스 해상도
 const WIDTH = 128;
@@ -26,6 +28,12 @@ let typewriterTimeout = null;
 let time = 0;
 let loopCount = 0;
 
+// 선택지 상태
+let showingChoices = false;
+let choices = [];
+let selectedChoice = 0;
+let choiceCallback = null;
+
 // 캐릭터 상태
 let clerk = { x: 85, state: 'idle' };
 let customer = { x: -20, targetX: 50, state: 'idle', visible: false };
@@ -34,6 +42,7 @@ let customer = { x: -20, targetX: 50, state: 'idle', visible: false };
 let flickerIntensity = 0;
 let doorOpen = false;
 let showItems = false;
+let endingType = null; // 'go_outside' or 'stay'
 
 // ============================================
 // 대사 데이터 (루프별)
@@ -105,19 +114,10 @@ const dialogues = {
     { speaker: '손님', text: '제가 뭘 살지 알고 계신 것 같아서.' },
     { speaker: '사장', text: '아... 오래 하다 보면 그래요.' },
     { speaker: '손님', text: '그렇구나. 몇 년이나 하셨어요?' },
-    { speaker: '사장', text: '...' },
+    { type: 'choice', choices: ['...잘 모르겠어요.', '...기억이 안 나요.', '(대답하지 않는다)'] },
     { speaker: '손님', text: '사장님?' },
-    { speaker: '사장', text: '...잘 모르겠어요.' },
-    { speaker: '손님', text: '네?' },
-    { speaker: '사장', text: '몇 년인지.' },
+    { speaker: '사장', text: '몇 년인지.', dynamicText: true },
     { speaker: '손님', text: '(웃음) 그 정도로 오래 하셨구나.' },
-    { speaker: '사장', text: '...그런가요.' },
-    { speaker: '손님', text: '가게 오래 하셨어요?' },
-    { speaker: '', text: '(또 이 질문.)' },
-    { speaker: '사장', text: '...요즘은 이상한 생각이 들어요.' },
-    { speaker: '손님', text: '어떤?' },
-    { speaker: '사장', text: '시간이 안 가는 것 같은.' },
-    { speaker: '손님', text: '아, 새벽이라 그래요. 새벽은 원래 길어요.' },
     { speaker: '사장', text: '...그런가요.' },
     { speaker: '손님', text: '감사합니다.', action: 'customer_leave' },
     { speaker: '사장', text: '몇 년이지. 여긴.' },
@@ -147,9 +147,7 @@ const dialogues = {
     { speaker: '손님', text: '네?' },
     { speaker: '사장', text: '마지막으로 이 문 밖을 나간 게 언제인지.' },
     { speaker: '손님', text: '...집에는 안 가세요?' },
-    { speaker: '사장', text: '집.' },
-    { speaker: '손님', text: '...' },
-    { speaker: '사장', text: '...있긴 한가.' },
+    { type: 'choice', choices: ['집이요...', '...있긴 한가.', '(대답하지 않는다)'] },
     { speaker: '손님', text: '(어색한 웃음) 좀 무서운데요.' },
     { speaker: '사장', text: '죄송해요.' },
     { speaker: '손님', text: '아뇨... 괜찮아요. 감사합니다.', action: 'customer_leave' },
@@ -197,8 +195,34 @@ const dialogues = {
     { speaker: '손님', text: '감사합니다.', action: 'customer_leave' },
     { speaker: '', text: '...' },
     { speaker: '', text: '(잠깐의 정적)', action: 'pause' },
-    { speaker: '사장', text: '...아침이 오려나.' },
-    { speaker: '', text: '', action: 'ending' },
+    { type: 'choice', choices: ['문 밖으로 나간다', '여기 있는다'], isFinalChoice: true },
+  ],
+
+  // 엔딩: 밖으로 나감
+  ending_go: [
+    { speaker: '', text: '(문을 연다)', action: 'open_door_ending' },
+    { speaker: '', text: '(발을 내딛는다)' },
+    { speaker: '', text: '...' },
+    { speaker: '', text: '(형광등 불빛)', action: 'show_store_again' },
+    { speaker: '', text: '(진열대. 냉장고. 카운터.)' },
+    { speaker: '', text: '(편의점이다.)' },
+    { speaker: '???', text: '어서오세요.' },
+    { speaker: '', text: '(카운터 뒤에 누군가 서 있다)' },
+    { speaker: '', text: '(나와 같은 앞치마를 입은)' },
+    { speaker: '', text: '...' },
+    { speaker: '', text: '', action: 'ending_fade' },
+  ],
+
+  // 엔딩: 여기 있음
+  ending_stay: [
+    { speaker: '', text: '(가만히 서 있는다)' },
+    { speaker: '', text: '...' },
+    { speaker: '', text: '(형광등이 깜빡인다)', action: 'flicker_intense' },
+    { speaker: '', text: '...' },
+    { speaker: '', text: '(문이 열리는 소리)', action: 'door_sound' },
+    { speaker: '', text: '...' },
+    { speaker: '', text: '...3시 12분.', action: 'show_clock_final' },
+    { speaker: '', text: '', action: 'ending_fade' },
   ],
 };
 
@@ -325,7 +349,7 @@ function drawClock() {
   ctx.fillRect(77, 62, 2, 9);
 }
 
-// 알바생 (카운터 뒤)
+// 사장 (카운터 뒤)
 function drawClerk(x, y, state = 'idle') {
   const breathe = Math.sin(time * 0.08) * 0.5;
   let bobY = breathe;
@@ -459,27 +483,92 @@ function drawDoorOpening() {
   ctx.fillRect(58, 35, 9, 12);
 }
 
-// 엔딩 - 창문 밝아짐
-function drawEnding() {
-  const brightness = Math.min(1, (time - endingStartTime) / 300);
-
+// 밖으로 나가는 엔딩 - 문 열림
+function drawDoorEndingOpen() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-  // 편의점 배경 (어둡게)
+  // 열린 문 (밖으로 나가는 시점)
+  ctx.fillStyle = '#333';
+  ctx.fillRect(20, 10, 88, 108);
+
+  ctx.fillStyle = '#0a1520';
+  ctx.fillRect(25, 15, 78, 98);
+
+  // 어둠
+  ctx.fillStyle = '#020508';
+  ctx.fillRect(30, 20, 68, 88);
+}
+
+// 밖으로 나갔는데 편의점 - 반전 엔딩
+function drawStoreAgain() {
+  flickerIntensity = 0.05;
   drawConvenienceStore();
 
-  // 창문에서 빛
-  ctx.fillStyle = `rgba(255, 240, 200, ${brightness * 0.5})`;
-  ctx.fillRect(0, 20, 10, 50);
-
-  // 전체 밝아짐
-  ctx.fillStyle = `rgba(255, 250, 240, ${brightness * 0.3})`;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  // 카운터 뒤에 또 다른 사장
+  drawClerk(85, 42, 'idle');
 }
 
 let endingStartTime = 0;
 let currentCutscene = null;
+let endingFadeOpacity = 0;
+
+// ============================================
+// 선택지 UI (HTML 기반)
+// ============================================
+function showChoices(choiceList, callback, isFinal = false) {
+  showingChoices = true;
+  choices = choiceList;
+  selectedChoice = 0;
+  choiceCallback = callback;
+  canProgress = false;
+
+  // 대화창 숨기기
+  dialogueBox.classList.remove('visible');
+  clickPrompt.classList.remove('visible');
+
+  // 선택지 표시
+  choiceBox.classList.add('visible');
+
+  choiceItems.forEach((item, i) => {
+    if (i < choiceList.length) {
+      item.textContent = choiceList[i];
+      item.classList.remove('hidden');
+      item.classList.toggle('selected', i === 0);
+    } else {
+      item.classList.add('hidden');
+    }
+  });
+}
+
+function updateChoiceSelection() {
+  choiceItems.forEach((item, i) => {
+    item.classList.toggle('selected', i === selectedChoice);
+  });
+}
+
+function selectChoice(index) {
+  showingChoices = false;
+  const selected = choices[index];
+  choices = [];
+
+  // 선택지 숨기기
+  choiceBox.classList.remove('visible');
+
+  if (choiceCallback) {
+    choiceCallback(index, selected);
+  }
+}
+
+// 선택지 클릭 이벤트
+choiceItems.forEach((item, i) => {
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (showingChoices && !item.classList.contains('hidden')) {
+      selectChoice(i);
+    }
+  });
+});
 
 // ============================================
 // 액션 처리
@@ -491,6 +580,10 @@ function handleAction(action) {
     case 'show_clock':
       currentCutscene = 'clock';
       setTimeout(() => { currentCutscene = null; }, 1500);
+      break;
+    case 'show_clock_final':
+      currentCutscene = 'clock';
+      setTimeout(() => { currentCutscene = null; }, 2000);
       break;
     case 'door_open':
       currentCutscene = 'door';
@@ -533,8 +626,20 @@ function handleAction(action) {
     case 'pause':
       flickerIntensity = 0;
       break;
-    case 'ending':
-      currentScene = 'ending';
+    case 'open_door_ending':
+      currentCutscene = 'door_ending';
+      break;
+    case 'show_store_again':
+      currentCutscene = 'store_again';
+      break;
+    case 'flicker_intense':
+      flickerIntensity = 0.3;
+      break;
+    case 'door_sound':
+      doorOpen = true;
+      break;
+    case 'ending_fade':
+      currentScene = 'ending_fade';
       endingStartTime = time;
       break;
   }
@@ -556,7 +661,14 @@ function update() {
   }
 
   // 형광등 깜빡임 (루프가 진행될수록 심해짐)
-  flickerIntensity = Math.min(0.1, loopCount * 0.02);
+  if (currentScene !== 'ending_go' && currentScene !== 'ending_stay') {
+    flickerIntensity = Math.min(0.1, loopCount * 0.02);
+  }
+
+  // 엔딩 페이드
+  if (currentScene === 'ending_fade') {
+    endingFadeOpacity = Math.min(1, (time - endingStartTime) / 180);
+  }
 }
 
 // ============================================
@@ -575,8 +687,24 @@ function render() {
     drawItems();
     return;
   }
-  if (currentScene === 'ending') {
-    drawEnding();
+  if (currentCutscene === 'door_ending') {
+    drawDoorEndingOpen();
+    return;
+  }
+  if (currentCutscene === 'store_again') {
+    drawStoreAgain();
+    return;
+  }
+  if (currentScene === 'ending_fade') {
+    if (endingType === 'go_outside') {
+      drawStoreAgain();
+    } else {
+      drawConvenienceStore();
+      drawClerk(clerk.x, 42, clerk.state);
+    }
+    // 페이드 아웃
+    ctx.fillStyle = `rgba(0, 0, 0, ${endingFadeOpacity})`;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
     return;
   }
 
@@ -633,6 +761,8 @@ function hideDialogue() {
 // 게임 진행
 // ============================================
 function getCurrentDialogues() {
+  if (currentScene === 'ending_go') return dialogues.ending_go;
+  if (currentScene === 'ending_stay') return dialogues.ending_stay;
   const loopKey = `loop${Math.min(loopCount + 1, 5)}`;
   return dialogues[loopKey] || dialogues.loop5;
 }
@@ -646,12 +776,14 @@ function progressDialogue() {
     resetState();
   }
 
-  if (currentScene === 'ending') {
+  if (currentScene === 'ending_fade') {
     // 엔딩 후 다시 타이틀로
-    if (time - endingStartTime > 300) {
+    if (endingFadeOpacity >= 1) {
       currentScene = 'title';
       titleScreen.classList.remove('hidden');
       hideDialogue();
+      endingType = null;
+      endingFadeOpacity = 0;
       return;
     }
   }
@@ -663,6 +795,29 @@ function progressDialogue() {
   }
 
   const d = sceneDialogues[dialogueIndex];
+
+  // 선택지 처리
+  if (d.type === 'choice') {
+    showChoices(d.choices, (index, selected) => {
+      if (d.isFinalChoice) {
+        // 최종 선택: 엔딩 분기
+        if (index === 0) {
+          endingType = 'go_outside';
+          currentScene = 'ending_go';
+        } else {
+          endingType = 'stay';
+          currentScene = 'ending_stay';
+        }
+        dialogueIndex = 0;
+        setTimeout(progressDialogue, 500);
+      } else {
+        dialogueIndex++;
+        setTimeout(progressDialogue, 100);
+      }
+    });
+    return;
+  }
+
   showDialogue(d.speaker, d.text, d.action);
   dialogueIndex++;
 }
@@ -685,6 +840,8 @@ function resetState() {
   showItems = false;
   flickerIntensity = 0;
   currentCutscene = null;
+  endingType = null;
+  endingFadeOpacity = 0;
 }
 
 // ============================================
@@ -704,20 +861,42 @@ function fadeIn() {
 // ============================================
 // 입력 처리
 // ============================================
-document.addEventListener('click', () => {
+document.addEventListener('click', (e) => {
+  if (showingChoices) {
+    // 클릭으로 선택
+    selectChoice(selectedChoice);
+    return;
+  }
+
   if (currentScene === 'title') {
     progressDialogue();
     return;
   }
   if (isTyping) {
     const d = getCurrentDialogues();
-    if (d && dialogueIndex > 0) skipTyping(d[dialogueIndex - 1].text);
+    if (d && dialogueIndex > 0 && !d[dialogueIndex - 1].type) {
+      skipTyping(d[dialogueIndex - 1].text);
+    }
   } else if (canProgress) {
     progressDialogue();
   }
 });
 
 document.addEventListener('keydown', (e) => {
+  if (showingChoices) {
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+      selectedChoice = Math.max(0, selectedChoice - 1);
+      updateChoiceSelection();
+    } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+      selectedChoice = Math.min(choices.length - 1, selectedChoice + 1);
+      updateChoiceSelection();
+    } else if (e.code === 'Space' || e.code === 'Enter') {
+      e.preventDefault();
+      selectChoice(selectedChoice);
+    }
+    return;
+  }
+
   if (e.code === 'Space' || e.code === 'Enter') {
     e.preventDefault();
     document.dispatchEvent(new Event('click'));
