@@ -1,0 +1,112 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+@font-face {
+  font-family: 'DungGeunMo';
+  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/DungGeunMo.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
+body {
+  background: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: 'DungGeunMo', monospace;
+  overflow: hidden;
+}
+
+#game-container {
+  position: relative;
+  width: 512px;
+  height: 512px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+#game-canvas {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+#dialogue-box {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid #fff;
+  padding: 16px;
+  min-height: 80px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+#dialogue-box.visible {
+  opacity: 1;
+}
+
+#speaker {
+  display: block;
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+
+#dialogue-text {
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.8;
+  letter-spacing: 1px;
+  min-height: 40px;
+}
+
+#click-prompt {
+  position: absolute;
+  bottom: 28px;
+  right: 28px;
+  color: #666;
+  font-size: 10px;
+  opacity: 0;
+  animation: blink 1.5s infinite;
+}
+
+#click-prompt.visible {
+  opacity: 1;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+
+/* 페이드 효과용 오버레이 */
+#game-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  opacity: var(--fade-opacity, 1);
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+
+#game-container.fade-in::after {
+  opacity: 0;
+}
+
+#game-container.fade-out::after {
+  opacity: 1;
+}
