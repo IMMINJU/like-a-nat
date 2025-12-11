@@ -741,6 +741,13 @@ function startScene(sceneName) {
   dialogueIndex = 0;
   hideDialogue();
 
+  // 타이틀 화면 숨기기
+  if (sceneName !== 'title') {
+    titleScreen.classList.add('hidden');
+  } else {
+    titleScreen.classList.remove('hidden');
+  }
+
   if (sceneName === 'scene1') resetState();
   if (sceneName === 'scene2') { faceY = 0; eyeState = 'open'; }
   if (sceneName === 'scene3') { childrenOpacity = 1; speaker.opacity = 0.15; speaker.state = 'idle'; speaker.x = WIDTH/2 - 4; }
@@ -812,6 +819,8 @@ document.addEventListener('keydown', (e) => {
 // 게임 루프
 // ============================================
 
+const titleScreen = document.getElementById('title-screen');
+
 function gameLoop() {
   time++;
   update();
@@ -821,13 +830,7 @@ function gameLoop() {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
       updateAndDrawSnow();
-      ctx.fillStyle = '#fff';
-      ctx.font = '6px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('클릭하여 시작', WIDTH/2, HEIGHT/2 + 20);
-      ctx.font = '8px monospace';
-      ctx.fillText('냇 킹 콜', WIDTH/2, HEIGHT/2 - 10);
-      ctx.fillText('같은 거야', WIDTH/2, HEIGHT/2 + 2);
+      // 타이틀 텍스트는 HTML로 표시
       break;
     case 'scene1': renderScene1(); break;
     case 'scene2': renderScene2(); break;
